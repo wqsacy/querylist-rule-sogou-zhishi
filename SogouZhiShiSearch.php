@@ -1,19 +1,19 @@
 <?php
-
+	
 	namespace QL\Ext;
-
+	
 	use QL\Contracts\PluginContract;
 	use QL\QueryList;
-
+	
 	class SogouZhiShiSearch implements PluginContract
 	{
-
+		
 		const API = 'https://www.sogou.com/sogou?';
 		const RULES = [
-			'title'    => [ 'vrTitle>a' , 'text' ] ,
-			'link'     => [ 'vrTitle>a' , 'href' ] ,
-			'best_answer' => [ '.best-answer .zs-info:last' , 'text' , '-span' ] ,
-			'other_answer' => [ '.js-other-tab-main .zs-info' , 'text' , '-span' ] ,
+			'title'    => [ '.vrTitle a' , 'text' ] ,
+			'link'     => [ '.vrTitle a' , 'href' ] ,
+			'best_answer' => [ '.best-answer .zs-info:last' , 'text' , '-a' ] ,
+			'other_answer' => [ '.js-other-tab-main .zs-info' , 'text' , '-a' ] ,
 		];
 		const RANGE = '.results .vrwrap';
 		protected $ql;
@@ -25,13 +25,13 @@
 				'Accept-Encoding' => 'gzip, deflate, br' ,
 			]
 		];
-
+		
 		public function __construct ( QueryList $ql , $pageNumber ) {
 			$this->ql = $ql->rules( self::RULES )
 			               ->range( self::RANGE );
 			$this->pageNumber = $pageNumber;
 		}
-
+		
 		public static function install ( QueryList $queryList , ...$opt ) {
 			$name = $opt[0] ?? 'sogouZhiShiSearch';
 			$queryList->bind( $name , function ( $pageNumber = 10 )
@@ -39,27 +39,40 @@
 				return new SogouZhiShiSearch( $this , $pageNumber );
 			} );
 		}
-
+		
 		public function setHttpOpt ( array $httpOpt = [] ) {
 			$this->httpOpt = $httpOpt;
 			return $this;
 		}
-
+		
 		public function search ( $keyword ) {
 			$this->keyword = $keyword;
 			return $this;
 		}
-
+		
 		public function page ( $page = 1 , $realURL = false ) {
 			return $this->query( $page )
 			            ->query()
 			            ->getData( function ( $item ) use ( $realURL )
-			             {
-				             $realURL && $item['link'] = $this->getRealURL( $item['link'] );
-				             return $item;
-			             } );
+			            {
+				            //去除杂项
+				            $item['title'] = str_replace(['收起回答','搜狗问问','百度知道'],'',$item['title']);
+				
+				            $item['best_answer'] = str_replace(['收起回答','搜狗问问','百度知道'],'',$item['best_answer']);
+				
+				            $item['best_answer'] = preg_replace( '/(https?|ftp|file|www|href)+([\s\S]*)/' , '' , $item['best_answer'] );
+				
+				            $item['other_answer'] = str_replace(['收起回答','搜狗问问','百度知道'],'',$item['other_answer']);
+				
+				            $item['other_answer'] = preg_replace( '/(https?|ftp|file|www|href)+([\s\S]*)/' , '' , $item['other_answer'] );
+				
+				
+				
+				            $realURL && $item['link'] = $this->getRealURL( $item['link'] );
+				            return $item;
+			            } );
 		}
-
+		
 		protected function query ( $page = 1 ) {
 			$this->ql->get( self::API , [
 				'query' => $this->keyword ,
@@ -69,7 +82,7 @@
 			] , $this->httpOpt );
 			return $this->ql;
 		}
-
+		
 		/**
 		 * 得到百度跳转的真正地址
 		 * @param $url
@@ -91,13 +104,13 @@
 				return $url;
 			}
 		}
-
+		
 		public function getCountPage () {
 			$count = $this->getCount();
 			$countPage = ceil( $count / $this->pageNumber );
 			return $countPage;
 		}
-
+		
 		public function getCount () {
 			$count = 0;
 			$text = $this->query( 1 )
@@ -108,5 +121,5 @@
 			}
 			return (int) $count;
 		}
-
+		
 	}
